@@ -313,49 +313,64 @@
 
             init() {
                 this.ctx = this.canvas.getContext('2d');
-                this.playerImage = new Image(); // プレイヤー用のImageオブジェクトを生成
+                this.playerImage = new Image();
+
+                this.playerImage.onload = () => {
+                    if (!this.player) {
+                        this.player = new Component(40, 40, this.playerImage, 10, 120, 'image');
+                    } else {
+                        this.player.image = this.playerImage;
+                        this.player.type = 'image';
+                    }
+                    this.player.reset();
+                    
+                    if (this.interval) clearInterval(this.interval);
+                    this.interval = setInterval(() => this.updateGameArea(), 20);
+                };
+
+                this.playerImage.onerror = () => {
+                    console.error("画像の読み込みに失敗しました:", this.playerImage.src);
+                    showMessage("キャラクター画像の読み込みに失敗しました。パスを確認してください。");
+                    if (!this.player) {
+                        this.player = new Component(40, 40, 'blue', 10, 120, 'color');
+                    } else {
+                        this.player.type = 'color';
+                        this.player.color = 'blue';
+                    }
+                    this.player.reset();
+                    if (this.interval) clearInterval(this.interval);
+                    this.interval = setInterval(() => this.updateGameArea(), 20);
+                };
 
                 // PCでの操作
                 document.addEventListener('keydown', (e) => {
-                    if (e.code === 'Space' && this.isGameActive) {
+                    if (e.code === 'Space' && this.isGameActive && this.player) {
                         this.player.jump();
                     }
                 });
                 // スマホでの操作
                 this.canvas.addEventListener('touchstart', (e) => {
-                    e.preventDefault(); // 画面スクロールを防ぐ
-                    if (this.isGameActive) {
+                    e.preventDefault();
+                    if (this.isGameActive && this.player) {
                         this.player.jump();
                     }
                 });
             },
 
             start() {
+                if (this.interval) clearInterval(this.interval);
+                
                 this.isGameActive = true;
                 this.obstacles = [];
                 this.score = 0;
                 this.frameNo = 0;
                 
-                // プレイヤーの画像を設定
                 this.playerImage.src = characterImages[playerData.level];
-
-                // プレイヤーコンポーネントを生成またはリセット
-                if (!this.player) {
-                    this.player = new Component(40, 40, this.playerImage, 10, 120, 'image');
-                } else {
-                    // プレイヤーの画像がレベルアップで変更された場合に対応
-                    this.player.image = this.playerImage;
-                }
-                this.player.reset();
-
-                if (this.interval) clearInterval(this.interval);
-                this.interval = setInterval(() => this.updateGameArea(), 20);
             },
 
             stop() {
                 this.isGameActive = false;
                 clearInterval(this.interval);
-                // ゲームオーバー時のスコア加算
                 if (this.score > 0) {
                     playerData.score += this.score;
                     showMessage(`${this.score} スコア獲得！`);
@@ -369,7 +384,8 @@
             },
 
             updateGameArea() {
-                // 衝突チェック
+                if (!this.player) return; // プレイヤーが未生成の場合は何もしない
+
                 for (let i = 0; i < this.obstacles.length; i++) {
                     if (this.player.crashWith(this.obstacles[i])) {
                         this.stop();
@@ -381,13 +397,12 @@
                 this.clear();
                 this.frameNo += 1;
                 
-                // 障害物の生成 (150フレームごと)
                 if (this.frameNo == 1 || everyInterval(150)) {
                     let x = this.canvas.width;
                     let minHeight = 20;
                     let maxHeight = 100;
                     let height = Math.floor(Math.random() * (maxHeight - minHeight + 1) + minHeight);
-                    let minGap = 60; // 隙間を少し広げる
+                    let minGap = 60;
                     let maxGap = 120;
                     let gap = Math.floor(Math.random() * (maxGap - minGap + 1) + minGap);
                     
@@ -395,14 +410,12 @@
                     this.obstacles.push(new Component(15, x - height - gap, "red", x, height + gap));
                 }
 
-                // 障害物の移動と削除
                 for (let i = 0; i < this.obstacles.length; i++) {
-                    this.obstacles[i].x += -2; // 少しスピードアップ
+                    this.obstacles[i].x += -2;
                     this.obstacles[i].update(this.ctx);
                 }
                 this.obstacles = this.obstacles.filter(obs => obs.x > -obs.width);
 
-                // スコア更新
                 this.score = Math.floor(this.frameNo / 5);
                 document.getElementById('game-score').textContent = this.score;
 
@@ -415,9 +428,10 @@
             return (game.frameNo / n) % 1 == 0;
         }
 
-        // ゲームのコンポーネントクラス (画像と矩形の両方に対応)
         function Component(width, height, imageOrColor, x, y, type) {
             this.type = type;
+            this.image = null;
+            this.color = null;
             if (this.type === "image") {
                 this.image = imageOrColor;
             } else {
@@ -429,15 +443,14 @@
             this.y = y;
             this.speedX = 0;
             this.speedY = 0;
-            this.gravity = 0.1; // 少し重力を強くして操作性を改善
+            this.gravity = 0.18; // 重力を少し強くして、よりキビキビした動きに
             this.gravitySpeed = 0;
-            this.isJumping = false;
             this.initialX = x;
             this.initialY = y;
 
             this.update = function(ctx) {
                 if (this.type === "image") {
-                    if (this.image.complete && this.image.naturalHeight !== 0) { // 画像が読み込み完了しているか確認
+                    if (this.image && this.image.complete && this.image.naturalHeight !== 0) {
                         ctx.drawImage(this.image, this.x, this.y, this.width, this.height);
                     }
                 } else {
@@ -458,12 +471,11 @@
                 if (this.y > rockbottom) {
                     this.y = rockbottom;
                     this.gravitySpeed = 0;
-                    this.isJumping = false;
                 }
             }
             
             this.crashWith = function(otherobj) {
-                const myleft = this.x + 5; // 当たり判定を少し小さくする
+                const myleft = this.x + 5;
                 const myright = this.x + (this.width) - 5;
                 const mytop = this.y + 5;
                 const mybottom = this.y + (this.height) - 5;
@@ -478,20 +490,17 @@
                 return crash;
             }
 
+            // ★ジャンプのロジックを修正
             this.jump = function() {
-                // 地面にいるときだけジャンプできるようにする
-                const rockbottom = game.canvas.height - this.height;
-                if (this.y >= rockbottom) {
-                    this.gravitySpeed = -4.5; // ジャンプの強さ
-                    this.isJumping = true;
-                }
+                // 慣性をなくし、クリックするたびに上に少し移動するFlappy Bird風のジャンプに変更
+                // 連続クリックで高く飛べる
+                this.gravitySpeed = -3.8; // 1クリックあたりのジャンプ力を調整
             }
             
             this.reset = function() {
                 this.x = this.initialX;
                 this.y = this.initialY;
                 this.gravitySpeed = 0;
-                this.isJumping = false;
             }
         }
 
