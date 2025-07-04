@@ -65,7 +65,7 @@
 
             <div class="flex justify-center items-center mb-4">
                 <div id="character-display" class="character-img-container rounded-full overflow-hidden border-4 border-yellow-400 flex justify-center items-center">
-                    <img id="character-image" src="https://storage.googleapis.com/gemini-prod/images/5696a655-b153-419a-9e2e-745a50e976c6.jpg" alt="キャラクター" class="w-full h-full object-cover">
+                    <img id="character-image" src="images/tex_lv1.png" alt="キャラクター" class="w-full h-full object-cover">
                 </div>
             </div>
 
@@ -149,14 +149,13 @@
             items: {} // { itemId: count }
         };
 
-        // キャラクター画像のマッピング (すべて同じ画像に)
-        const uploadedImageUrl = 'https://storage.googleapis.com/gemini-prod/images/5696a655-b153-419a-9e2e-745a50e976c6.jpg';
+        // キャラクター画像のマッピング (レベルごとに変更)
         const characterImages = {
-            1: uploadedImageUrl,
-            2: uploadedImageUrl,
-            3: uploadedImageUrl,
-            4: uploadedImageUrl,
-            5: uploadedImageUrl
+            1: 'images/tex_lv1.png',
+            2: 'images/tex_lv2.png',
+            3: 'images/tex_lv3.png',
+            4: 'images/tex_lv4.png',
+            5: 'images/tex.png'
         };
         
         // アイテムの定義
@@ -343,6 +342,9 @@
                 // プレイヤーコンポーネントを生成またはリセット
                 if (!this.player) {
                     this.player = new Component(40, 40, this.playerImage, 10, 120, 'image');
+                } else {
+                    // プレイヤーの画像がレベルアップで変更された場合に対応
+                    this.player.image = this.playerImage;
                 }
                 this.player.reset();
 
