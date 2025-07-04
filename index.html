@@ -1,0 +1,504 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>キャラクター育成ゲーム</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=M+PLUS+Rounded+1c:wght@400;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'M PLUS Rounded 1c', sans-serif;
+            touch-action: manipulation; /* ダブルタップによるズームを無効化 */
+        }
+        .screen {
+            display: none;
+        }
+        .screen.active {
+            display: block;
+        }
+        #game-canvas {
+            background-color: #f0f8ff;
+            border: 2px solid #4a5568;
+            border-radius: 0.5rem;
+            cursor: pointer;
+        }
+        .character-img-container {
+            width: 200px;
+            height: 200px;
+            background-color: #e2e8f0;
+        }
+        .item-icon {
+            width: 48px;
+            height: 48px;
+        }
+        .btn {
+            @apply px-4 py-2 font-bold text-white bg-blue-500 rounded-lg shadow-md hover:bg-blue-700 transition-all duration-200 transform hover:scale-105;
+        }
+        .btn-green {
+            @apply bg-green-500 hover:bg-green-700;
+        }
+        .btn-red {
+            @apply bg-red-500 hover:bg-red-700;
+        }
+        .btn-gray {
+             @apply bg-gray-400 hover:bg-gray-500 cursor-not-allowed;
+        }
+        /* メッセージモーダルのスタイル */
+        #message-modal {
+            display: none; /* 初期状態では非表示 */
+        }
+    </style>
+</head>
+<body class="bg-gray-100 text-gray-800">
+
+    <div id="app" class="max-w-md mx-auto p-4 bg-white shadow-lg rounded-lg mt-4">
+
+        <!-- メイン画面 -->
+        <div id="main-screen" class="screen active">
+            <h1 class="text-2xl font-bold text-center mb-4">ホーム</h1>
+            
+            <div class="text-center mb-4">
+                <p>スコア: <span id="score-display">0</span></p>
+                <p>レベル: <span id="level-display">1</span></p>
+            </div>
+
+            <div class="flex justify-center items-center mb-4">
+                <div id="character-display" class="character-img-container rounded-full overflow-hidden border-4 border-yellow-400 flex justify-center items-center">
+                    <img id="character-image" src="https://storage.googleapis.com/gemini-prod/images/5696a655-b153-419a-9e2e-745a50e976c6.jpg" alt="キャラクター" class="w-full h-full object-cover">
+                </div>
+            </div>
+
+            <div class="mb-4">
+                <h2 class="text-xl font-bold mb-2">もちもの</h2>
+                <div id="inventory" class="grid grid-cols-4 gap-2 bg-gray-200 p-2 rounded-lg min-h-[80px]">
+                    <!-- 所持アイテムがここに表示されます -->
+                </div>
+            </div>
+            
+            <div class="text-center space-y-4">
+                <button id="start-game-btn" class="btn btn-green w-full">ミニゲームで遊ぶ</button>
+                <button id="go-to-shop-btn" class="btn w-full">ショップへ行く</button>
+            </div>
+        </div>
+
+        <!-- ミニゲーム画面 -->
+        <div id="game-screen" class="screen">
+            <h1 class="text-2xl font-bold text-center mb-2">ミニゲーム</h1>
+            <p class="text-center mb-2">画面タップ/スペースキーでジャンプ！</p>
+            <div class="text-center mb-2">
+                <span class="font-bold">SCORE:</span> <span id="game-score">0</span>
+            </div>
+            <canvas id="game-canvas" width="400" height="200"></canvas>
+            <div class="text-center mt-4">
+                <button id="back-to-main-from-game" class="btn btn-red">ゲームをやめる</button>
+            </div>
+        </div>
+
+        <!-- ショップ画面 -->
+        <div id="shop-screen" class="screen">
+            <h1 class="text-2xl font-bold text-center mb-4">ショップ</h1>
+            <p class="text-center mb-4">スコア: <span id="shop-score-display">0</span></p>
+            <div id="item-list" class="space-y-3">
+                <!-- アイテムリストがここに表示されます -->
+            </div>
+            <div class="text-center mt-6">
+                <button id="back-to-main-from-shop" class="btn">ホームへ戻る</button>
+            </div>
+        </div>
+
+    </div>
+
+    <!-- メッセージ表示用モーダル -->
+    <div id="message-modal" class="fixed inset-0 bg-black bg-opacity-50 flex justify-center items-center z-50">
+        <div class="bg-white p-6 rounded-lg shadow-xl text-center">
+            <p id="message-text" class="mb-4"></p>
+            <button id="message-close-btn" class="btn">とじる</button>
+        </div>
+    </div>
+
+
+    <script>
+        // DOM要素の取得
+        const mainScreen = document.getElementById('main-screen');
+        const gameScreen = document.getElementById('game-screen');
+        const shopScreen = document.getElementById('shop-screen');
+        const screens = [mainScreen, gameScreen, shopScreen];
+
+        const startGameBtn = document.getElementById('start-game-btn');
+        const goToShopBtn = document.getElementById('go-to-shop-btn');
+        const backToMainFromGame = document.getElementById('back-to-main-from-game');
+        const backToMainFromShop = document.getElementById('back-to-main-from-shop');
+
+        const scoreDisplay = document.getElementById('score-display');
+        const shopScoreDisplay = document.getElementById('shop-score-display');
+        const levelDisplay = document.getElementById('level-display');
+        const characterImage = document.getElementById('character-image');
+        const inventory = document.getElementById('inventory');
+        const itemList = document.getElementById('item-list');
+
+        // メッセージモーダル関連
+        const messageModal = document.getElementById('message-modal');
+        const messageText = document.getElementById('message-text');
+        const messageCloseBtn = document.getElementById('message-close-btn');
+
+        // ゲームの状態を管理するオブジェクト
+        let playerData = {
+            score: 0,
+            level: 1,
+            items: {} // { itemId: count }
+        };
+
+        // キャラクター画像のマッピング (すべて同じ画像に)
+        const uploadedImageUrl = 'https://storage.googleapis.com/gemini-prod/images/5696a655-b153-419a-9e2e-745a50e976c6.jpg';
+        const characterImages = {
+            1: uploadedImageUrl,
+            2: uploadedImageUrl,
+            3: uploadedImageUrl,
+            4: uploadedImageUrl,
+            5: uploadedImageUrl
+        };
+        
+        // アイテムの定義
+        const items = {
+            'levelUpPotion': {
+                name: 'レベルアップ薬',
+                description: 'キャラクターを1レベルアップさせる。',
+                cost: 500,
+                icon: `
+                    <svg class="item-icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <path d="M12 2C8.68629 2 6 4.68629 6 8C6 11.3137 8.68629 14 12 14C15.3137 14 18 11.3137 18 8C18 4.68629 15.3137 2 12 2Z" fill="#8b5cf6"/>
+                        <path d="M12 14V22L15 19L12 22L9 19L12 14Z" stroke="#c4b5fd" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                        <path d="M12 11C13.6569 11 15 9.65685 15 8C15 6.34315 13.6569 5 12 5C10.3431 5 9 6.34315 9 8C9 9.65685 10.3431 11 12 11Z" fill="white"/>
+                    </svg>`
+            }
+        };
+
+        // --- 画面遷移の管理 ---
+        function showScreen(screenId) {
+            screens.forEach(screen => {
+                screen.classList.toggle('active', screen.id === screenId);
+            });
+            if (screenId === 'game-screen') {
+                game.start();
+            } else {
+                game.stop();
+            }
+        }
+
+        startGameBtn.addEventListener('click', () => showScreen('game-screen'));
+        goToShopBtn.addEventListener('click', () => showScreen('shop-screen'));
+        backToMainFromGame.addEventListener('click', () => showScreen('main-screen'));
+        backToMainFromShop.addEventListener('click', () => showScreen('main-screen'));
+
+        // --- データ管理 ---
+        function saveData() {
+            localStorage.setItem('characterGameData', JSON.stringify(playerData));
+        }
+
+        function loadData() {
+            const savedData = localStorage.getItem('characterGameData');
+            if (savedData) {
+                playerData = JSON.parse(savedData);
+            }
+            updateUI();
+        }
+
+        // --- UI更新 ---
+        function updateUI() {
+            // スコアとレベル表示
+            scoreDisplay.textContent = playerData.score;
+            shopScoreDisplay.textContent = playerData.score;
+            levelDisplay.textContent = playerData.level;
+
+            // キャラクター画像
+            characterImage.src = characterImages[playerData.level];
+            characterImage.alt = `キャラクター レベル${playerData.level}`;
+
+            // もちもの表示
+            inventory.innerHTML = '';
+            for (const itemId in playerData.items) {
+                if (playerData.items[itemId] > 0) {
+                    const item = items[itemId];
+                    const itemDiv = document.createElement('div');
+                    itemDiv.className = 'flex flex-col items-center p-1 bg-white rounded-lg shadow cursor-pointer hover:bg-yellow-100';
+                    itemDiv.innerHTML = `
+                        ${item.icon}
+                        <span class="text-xs font-bold">${item.name}</span>
+                        <span class="text-xs">x${playerData.items[itemId]}</span>
+                    `;
+                    itemDiv.addEventListener('click', () => useItem(itemId));
+                    inventory.appendChild(itemDiv);
+                }
+            }
+
+            // ショップ表示
+            itemList.innerHTML = '';
+            for (const itemId in items) {
+                const item = items[itemId];
+                const itemDiv = document.createElement('div');
+                itemDiv.className = 'flex items-center justify-between p-3 bg-gray-100 rounded-lg shadow';
+                itemDiv.innerHTML = `
+                    <div class="flex items-center">
+                        ${item.icon}
+                        <div class="ml-3">
+                            <p class="font-bold">${item.name}</p>
+                            <p class="text-sm text-gray-600">${item.description}</p>
+                        </div>
+                    </div>
+                    <div class="text-right">
+                        <p class="font-bold text-yellow-600">S ${item.cost}</p>
+                        <button class="buy-btn btn text-sm py-1 px-3 mt-1 ${playerData.score >= item.cost ? '' : 'btn-gray'}" data-item-id="${itemId}" ${playerData.score < item.cost ? 'disabled' : ''}>
+                            買う
+                        </button>
+                    </div>
+                `;
+                itemList.appendChild(itemDiv);
+            }
+            document.querySelectorAll('.buy-btn').forEach(button => {
+                button.addEventListener('click', (e) => buyItem(e.target.dataset.itemId));
+            });
+        }
+        
+        // --- アイテム関連のロジック ---
+        function buyItem(itemId) {
+            const item = items[itemId];
+            if (playerData.score >= item.cost) {
+                playerData.score -= item.cost;
+                playerData.items[itemId] = (playerData.items[itemId] || 0) + 1;
+                showMessage(`${item.name} を購入しました！`);
+                saveData();
+                updateUI();
+            } else {
+                showMessage('スコアが足りません。');
+            }
+        }
+
+        function useItem(itemId) {
+            if (playerData.items[itemId] > 0) {
+                const item = items[itemId];
+                if (itemId === 'levelUpPotion') {
+                    if (playerData.level < 5) {
+                        playerData.level++;
+                        playerData.items[itemId]--;
+                        showMessage(`レベルが ${playerData.level} に上がった！`);
+                        saveData();
+                        updateUI();
+                    } else {
+                        showMessage('これ以上レベルアップできません。');
+                    }
+                }
+            }
+        }
+
+        // --- メッセージモーダル ---
+        function showMessage(msg) {
+            messageText.textContent = msg;
+            messageModal.style.display = 'flex';
+        }
+        messageCloseBtn.addEventListener('click', () => {
+            messageModal.style.display = 'none';
+        });
+
+        // --- ミニゲームのロジック ---
+        const game = {
+            canvas: document.getElementById('game-canvas'),
+            ctx: null,
+            player: null,
+            playerImage: null, // プレイヤー画像オブジェクト
+            obstacles: [],
+            score: 0,
+            frameNo: 0,
+            interval: null,
+            isGameActive: false,
+
+            init() {
+                this.ctx = this.canvas.getContext('2d');
+                this.playerImage = new Image(); // プレイヤー用のImageオブジェクトを生成
+
+                // PCでの操作
+                document.addEventListener('keydown', (e) => {
+                    if (e.code === 'Space' && this.isGameActive) {
+                        this.player.jump();
+                    }
+                });
+                // スマホでの操作
+                this.canvas.addEventListener('touchstart', (e) => {
+                    e.preventDefault(); // 画面スクロールを防ぐ
+                    if (this.isGameActive) {
+                        this.player.jump();
+                    }
+                });
+            },
+
+            start() {
+                this.isGameActive = true;
+                this.obstacles = [];
+                this.score = 0;
+                this.frameNo = 0;
+                
+                // プレイヤーの画像を設定
+                this.playerImage.src = characterImages[playerData.level];
+
+                // プレイヤーコンポーネントを生成またはリセット
+                if (!this.player) {
+                    this.player = new Component(40, 40, this.playerImage, 10, 120, 'image');
+                }
+                this.player.reset();
+
+                if (this.interval) clearInterval(this.interval);
+                this.interval = setInterval(() => this.updateGameArea(), 20);
+            },
+
+            stop() {
+                this.isGameActive = false;
+                clearInterval(this.interval);
+                // ゲームオーバー時のスコア加算
+                if (this.score > 0) {
+                    playerData.score += this.score;
+                    showMessage(`${this.score} スコア獲得！`);
+                    saveData();
+                    updateUI();
+                }
+            },
+
+            clear() {
+                this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+            },
+
+            updateGameArea() {
+                // 衝突チェック
+                for (let i = 0; i < this.obstacles.length; i++) {
+                    if (this.player.crashWith(this.obstacles[i])) {
+                        this.stop();
+                        showScreen('main-screen');
+                        return;
+                    }
+                }
+
+                this.clear();
+                this.frameNo += 1;
+                
+                // 障害物の生成 (150フレームごと)
+                if (this.frameNo == 1 || everyInterval(150)) {
+                    let x = this.canvas.width;
+                    let minHeight = 20;
+                    let maxHeight = 100;
+                    let height = Math.floor(Math.random() * (maxHeight - minHeight + 1) + minHeight);
+                    let minGap = 60; // 隙間を少し広げる
+                    let maxGap = 120;
+                    let gap = Math.floor(Math.random() * (maxGap - minGap + 1) + minGap);
+                    
+                    this.obstacles.push(new Component(15, height, "red", x, 0));
+                    this.obstacles.push(new Component(15, x - height - gap, "red", x, height + gap));
+                }
+
+                // 障害物の移動と削除
+                for (let i = 0; i < this.obstacles.length; i++) {
+                    this.obstacles[i].x += -2; // 少しスピードアップ
+                    this.obstacles[i].update(this.ctx);
+                }
+                this.obstacles = this.obstacles.filter(obs => obs.x > -obs.width);
+
+                // スコア更新
+                this.score = Math.floor(this.frameNo / 5);
+                document.getElementById('game-score').textContent = this.score;
+
+                this.player.newPos();
+                this.player.update(this.ctx);
+            }
+        };
+
+        function everyInterval(n) {
+            return (game.frameNo / n) % 1 == 0;
+        }
+
+        // ゲームのコンポーネントクラス (画像と矩形の両方に対応)
+        function Component(width, height, imageOrColor, x, y, type) {
+            this.type = type;
+            if (this.type === "image") {
+                this.image = imageOrColor;
+            } else {
+                this.color = imageOrColor;
+            }
+            this.width = width;
+            this.height = height;
+            this.x = x;
+            this.y = y;
+            this.speedX = 0;
+            this.speedY = 0;
+            this.gravity = 0.1; // 少し重力を強くして操作性を改善
+            this.gravitySpeed = 0;
+            this.isJumping = false;
+            this.initialX = x;
+            this.initialY = y;
+
+            this.update = function(ctx) {
+                if (this.type === "image") {
+                    if (this.image.complete && this.image.naturalHeight !== 0) { // 画像が読み込み完了しているか確認
+                        ctx.drawImage(this.image, this.x, this.y, this.width, this.height);
+                    }
+                } else {
+                    ctx.fillStyle = this.color;
+                    ctx.fillRect(this.x, this.y, this.width, this.height);
+                }
+            }
+
+            this.newPos = function() {
+                this.gravitySpeed += this.gravity;
+                this.x += this.speedX;
+                this.y += this.speedY + this.gravitySpeed;
+                this.hitBottom();
+            }
+            
+            this.hitBottom = function() {
+                const rockbottom = game.canvas.height - this.height;
+                if (this.y > rockbottom) {
+                    this.y = rockbottom;
+                    this.gravitySpeed = 0;
+                    this.isJumping = false;
+                }
+            }
+            
+            this.crashWith = function(otherobj) {
+                const myleft = this.x + 5; // 当たり判定を少し小さくする
+                const myright = this.x + (this.width) - 5;
+                const mytop = this.y + 5;
+                const mybottom = this.y + (this.height) - 5;
+                const otherleft = otherobj.x;
+                const otherright = otherobj.x + (otherobj.width);
+                const othertop = otherobj.y;
+                const otherbottom = otherobj.y + (otherobj.height);
+                let crash = true;
+                if ((mybottom < othertop) || (mytop > otherbottom) || (myright < otherleft) || (myleft > otherright)) {
+                    crash = false;
+                }
+                return crash;
+            }
+
+            this.jump = function() {
+                // 地面にいるときだけジャンプできるようにする
+                const rockbottom = game.canvas.height - this.height;
+                if (this.y >= rockbottom) {
+                    this.gravitySpeed = -4.5; // ジャンプの強さ
+                    this.isJumping = true;
+                }
+            }
+            
+            this.reset = function() {
+                this.x = this.initialX;
+                this.y = this.initialY;
+                this.gravitySpeed = 0;
+                this.isJumping = false;
+            }
+        }
+
+        // --- 初期化処理 ---
+        window.addEventListener('load', () => {
+            game.init();
+            loadData();
+        });
+
+    </script>
+</body>
+</html>
